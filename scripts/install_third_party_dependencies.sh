@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python setup.py install
+set -e
 
 echo "Download CUTLASS, required for Deepspeed Evoformer attention kernel"
 git clone https://github.com/NVIDIA/cutlass --branch v3.6.0 --depth 1

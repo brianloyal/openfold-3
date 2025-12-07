@@ -26,8 +26,11 @@ RUN mamba env update -n base --file /opt/openfold3/environment.yml \
     && mamba clean --all --yes \
     && conda clean --all --yes
 
-# Copy the entire source tree
-COPY . /opt/openfold3/
+# Copy the minimal set of files needed to install the package
+COPY setup.py /opt/openfold3/
+COPY pyproject.toml /opt/openfold3/
+COPY openfold3/__init__.py /opt/openfold3/openfold3/
+COPY scripts/ /opt/openfold3/scripts/
 
 # Install third party dependencies
 WORKDIR /opt/
@@ -85,7 +88,7 @@ ENV KMP_AFFINITY=none
 ENV LIBRARY_PATH=/opt/conda/lib:$LIBRARY_PATH
 ENV LD_LIBRARY_PATH=/opt/conda/lib:$LD_LIBRARY_PATH
 
-# Copy the entire source tree to the runtime image
-COPY --from=builder /opt/openfold3 /opt/openfold3
+# Copy the entire source tree directly (at the very end for optimal caching)
+COPY . /opt/openfold3
 
 WORKDIR /opt/openfold3
