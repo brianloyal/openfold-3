@@ -19,6 +19,7 @@ RUN wget -P /tmp \
     && rm /tmp/Miniforge3-Linux-x86_64.sh
 
 ENV PATH=/opt/conda/bin:$PATH
+ENV CONDA_PREFIX=/opt/conda
 
 # Copy and install dependencies with aggressive cleanup
 COPY environments/production.yml /opt/openfold3/environment.yml
@@ -38,7 +39,7 @@ RUN /opt/openfold3/scripts/install_third_party_dependencies.sh
 
 # Install the package
 WORKDIR /opt/openfold3
-RUN python3 setup.py install
+RUN python3 pip install .
 
 # Set CUDA architecture for compilation (adjust based on your GPU)
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0"

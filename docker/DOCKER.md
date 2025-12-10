@@ -27,5 +27,9 @@ docker build \
 
 Run the unit tests
 ```
-docker run --rm -v $(pwd -P):/opt/openfold3 -t openfold-docker:tests pytest openfold3/tests -vvv
+docker run \
+    --rm \
+    -v $(pwd -P):/opt/openfold3 \
+    -t openfold-docker:test \
+    pytest openfold3/tests -vvv
 ```
