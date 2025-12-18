@@ -1,6 +1,9 @@
 # Full performance multi-stage build with complete CUDA toolchain
-ARG CUDA_BASE_IMAGE_TAG=12.2.2-cudnn8-devel-ubuntu22.04
+ARG CUDA_BASE_IMAGE_TAG=12.1.1-cudnn8-devel-ubuntu22.04
 FROM nvidia/cuda:${CUDA_BASE_IMAGE_TAG} AS builder
+
+# Environment mode: "lock" for reproducible builds, "yaml" for flexible dev builds
+ARG BUILD_MODE=yaml
 
 # Install complete build dependencies including CUDA compiler tools
 RUN apt-get update && apt-get install -y \
@@ -16,18 +19,36 @@ RUN apt-get update && apt-get install -y \
 # Install miniforge
 # FIXME this needs to be pinned, with more recent versions (25.11.0-1) the package resolution is stuck
 RUN wget -P /tmp \
-    "https://github.com/conda-forge/miniforge/releases/download/25.3.1-0/Miniforge3-Linux-x86_64.sh" \
+    "https://github.com/conda-forge/miniforge/releases/download/25.11.0-1/Miniforge3-Linux-x86_64.sh" \
     && bash /tmp/Miniforge3-Linux-x86_64.sh -b -p /opt/conda \
     && rm /tmp/Miniforge3-Linux-x86_64.sh
 
 ENV PATH=/opt/conda/bin:$PATH
-ENV CONDA_PREFIX=/opt/conda
 
-# Copy and install dependencies with aggressive cleanup
-COPY environments/production.yml /opt/openfold3/environment.yml
-RUN mamba env update -n base --file /opt/openfold3/environment.yml \
+# Copy environment files for both modes (small files, good for caching)
+# To regenerate the lock file, see docker/DOCKER.md
+# Use BUILD_MODE=yaml (default) for reproducible builds, BUILD_MODE=yml for flexible dev builds
+COPY environments/production-linux-64.lock /opt/openfold3/production-linux-64.lock
+COPY environments/production.yml /opt/openfold3/production.yml
+
+# Install environment based on BUILD_MODE
+# - lock: uses conda-lock for exact reproducible builds (training/production)
+# - yaml: uses mamba env create for flexible version resolution (development/testing)
+RUN mamba install -n base -c conda-forge conda-lock --yes \
+    && if [ "$BUILD_MODE" = "lock" ]; then \
+         conda-lock install --name openfold3 /opt/openfold3/production-linux-64.lock; \
+       elif [ "$BUILD_MODE" = "yaml" ]; then \
+         mamba env create -f /opt/openfold3/production.yml --name openfold3; \
+       else \
+         echo "Invalid BUILD_MODE: $BUILD_MODE. Use 'lock' or 'yaml'." && exit 1; \
+       fi \
     && mamba clean --all --yes \
     && conda clean --all --yes
+
+# Activate the openfold3 environment by default
+ENV PATH=/opt/conda/envs/openfold3/bin:$PATH
+ENV CONDA_PREFIX=/opt/conda/envs/openfold3
+ENV CONDA_DEFAULT_ENV=openfold3
 
 # Copy the minimal set of files needed to install the package
 COPY setup.py /opt/openfold3/
@@ -52,7 +73,7 @@ ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0"
 #     python3 -c "import deepspeed; print('DeepSpeed ops loaded successfully')"
 
 # Devel stage - use devel image for full CUDA support
-ARG CUDA_BASE_IMAGE_TAG=12.2.2-cudnn8-devel-ubuntu22.04
+ARG CUDA_BASE_IMAGE_TAG=12.1.1-cudnn8-devel-ubuntu22.04
 FROM nvidia/cuda:${CUDA_BASE_IMAGE_TAG} AS devel
 
 # Install devel dependencies
@@ -82,16 +103,24 @@ RUN rm -rf /usr/local/cuda/doc \
 
 # Copy the entire conda environment
 COPY --from=builder /opt/conda /opt/conda
-ENV PATH=/opt/conda/bin:$PATH
 
 # Copy CUTLASS
 COPY --from=builder /opt/cutlass /opt/cutlass
 
+# Activate the openfold3 environment by default
+ENV PATH=/opt/conda/envs/openfold3/bin:/opt/conda/bin:$PATH
+ENV CONDA_PREFIX=/opt/conda/envs/openfold3
+ENV CONDA_DEFAULT_ENV=openfold3
+
+# Ensure interactive shells also activate openfold3
+RUN /opt/conda/bin/conda init bash \
+    && echo "conda activate openfold3" >> /root/.bashrc
+
 # Set environment variables
 ENV CUTLASS_PATH=/opt/cutlass
 ENV KMP_AFFINITY=none
-ENV LIBRARY_PATH=/opt/conda/lib:$LIBRARY_PATH
-ENV LD_LIBRARY_PATH=/opt/conda/lib:$LD_LIBRARY_PATH
+ENV LIBRARY_PATH=/opt/conda/envs/openfold3/lib:$LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/opt/conda/envs/openfold3/lib:$LD_LIBRARY_PATH
 
 # Copy the entire source tree directly (at the very end for optimal caching)
 COPY . /opt/openfold3
