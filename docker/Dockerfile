@@ -38,7 +38,7 @@ RUN mamba install -n base -c conda-forge conda-lock --yes \
     && if [ "$BUILD_MODE" = "lock" ]; then \
          conda-lock install --name openfold3 /opt/openfold3/production-linux-64.lock; \
        elif [ "$BUILD_MODE" = "yaml" ]; then \
-         mamba env create -f /opt/openfold3/pproduction-linux-64 --name openfold3; \
+         mamba env create -f /opt/openfold3/production-linux-64.yml --name openfold3; \
        else \
          echo "Invalid BUILD_MODE: $BUILD_MODE. Use 'lock' or 'yaml'." && exit 1; \
        fi \
@@ -61,7 +61,7 @@ RUN /opt/openfold3/scripts/install_third_party_dependencies.sh
 
 # Install the package
 WORKDIR /opt/openfold3
-RUN python -m uv pip install --editable --no-deps .
+RUN uv pip install --no-deps --editable .
 
 # Set CUDA architecture for compilation (adjust based on your GPU)
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0"
@@ -130,5 +130,5 @@ FROM devel AS test
 
 WORKDIR /opt/openfold3
 # Only uv supports --dependency-groups from pyproject.toml
-RUN uv pip install --dependency-groups=test
+RUN uv pip install --group=test
 RUN uv pip install --no-deps --editable .
